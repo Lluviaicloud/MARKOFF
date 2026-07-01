@@ -6,4 +6,16 @@ build/
 dist/
 __pycache__/
 Scripts/__pycache__/
-*_clean*.mp4
+
+# Artefactos de build / empaquetado (no versionar binarios)
+*.pkg
+*.dmg
+
+# Videos de muestra y salidas (contenido personal)
+*.mp4
+*.mov
+*.MP4
+*.MOV
+
+# Carpetas de scratch/auditoria con frames de video personal
+audit_*/

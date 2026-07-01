@@ -54,9 +54,9 @@
 - Strict verification on mounted app from the generated `.dmg` passed:
 - `/private/tmp/inpaint-videos-release.../verify-mount/InpaintVideos.app: valid on disk`
 - Packaging output produced:
-- `/Users/luispelaez/Documents/Inpaint_videos/dist/InpaintVideos-macos-arm64.dmg`
+- `~/Documents/Inpaint_videos/dist/InpaintVideos-macos-arm64.dmg`
 - Signing identity used:
-- `Apple Development: luis.pelaez@endesa.es (YP8827HR9W)`
+- `Apple Development: <redacted-email> (<redacted-team-id>)`
 - Architecture verified:
 - `arm64`
 
@@ -71,7 +71,7 @@
 1. Run `git status` and confirm there is no uncommitted work you need to preserve.
 2. Run `git reset --hard HEAD~2` to remove both the phase-5 implementation commit and the phase-state sync commit.
 3. Delete the generated packaging artifact if still present:
-   `rm -rf /Users/luispelaez/Documents/Inpaint_videos/dist`
+   `rm -rf ~/Documents/Inpaint_videos/dist`
 
 ## Next Phase Entry Conditions
 

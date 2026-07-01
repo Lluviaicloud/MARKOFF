@@ -43,9 +43,9 @@
 - automatic cleanup output generation
 - manual cleanup overwrite behavior
 - visible bright-pixel reduction after inpainting on a synthetic watermark
-- Real evidence check on `/Users/luispelaez/Desktop/video luna.MP4`:
+- Real evidence check on `~/Desktop/video luna.MP4`:
 - automatic detection converged to the lower-right watermark region with confidence `0.771`
-- processed sample output was generated at `/Users/luispelaez/Documents/Inpaint_videos/video_luna_clean_phase2.mp4`
+- processed sample output was generated at `~/Documents/Inpaint_videos/video_luna_clean_phase2.mp4`
 
 ## Step 5 Fixes
 
@@ -65,7 +65,7 @@
 
 1. Run `git status` and confirm only phase-2 files are present.
 2. Run `git reset --hard HEAD~2` to drop both the phase-2 implementation commit and the phase-state sync commit.
-3. If you also want to remove the generated sample output, delete `/Users/luispelaez/Documents/Inpaint_videos/video_luna_clean_phase2.mp4`.
+3. If you also want to remove the generated sample output, delete `~/Documents/Inpaint_videos/video_luna_clean_phase2.mp4`.
 
 ## Next Phase Entry Conditions
 

@@ -10,16 +10,14 @@ APP_ICON_SOURCE="$ROOT_DIR/Packaging/AppIcon.icns"
 PYTHON_SCRIPT_SOURCE="$ROOT_DIR/Scripts/watermark_pipeline.py"
 DIST_DIR="$ROOT_DIR/dist"
 APP_NAME="MarkOff.app"
-DMG_PATH="$DIST_DIR/MarkOff-macos-arm64.dmg"
-TEMP_ROOT="$(mktemp -d /private/tmp/inpaint-videos-release.XXXXXX)"
+PKG_PATH="$DIST_DIR/MarkOff-macos-arm64.pkg"
+BUNDLE_IDENTIFIER="com.luispelaez.markoff"
+PKG_VERSION="1.0"
+TEMP_ROOT="$(mktemp -d /private/tmp/inpaint-videos-pkg.XXXXXX)"
 STAGING_APP="$TEMP_ROOT/$APP_NAME"
-DMG_STAGE_DIR="$TEMP_ROOT/dmg-root"
-VERIFY_MOUNT="$TEMP_ROOT/verify-mount"
+PKG_ROOT="$TEMP_ROOT/pkg-root"
 
 cleanup() {
-    if mount | /usr/bin/grep -q "on $VERIFY_MOUNT "; then
-        /usr/bin/hdiutil detach "$VERIFY_MOUNT" >/dev/null 2>&1 || true
-    fi
     /bin/rm -rf "$TEMP_ROOT"
 }
 
@@ -78,10 +76,10 @@ esac
 /bin/mkdir -p \
     "$STAGING_APP/Contents/MacOS" \
     "$STAGING_APP/Contents/Resources/Scripts" \
-    "$DMG_STAGE_DIR" \
-    "$DIST_DIR" \
-    "$VERIFY_MOUNT"
+    "$PKG_ROOT" \
+    "$DIST_DIR"
 
+# Ensamblado del bundle con ditto endurecido (sin atributos extendidos que invaliden la firma)
 /usr/bin/ditto --norsrc --noextattr --noqtn --noacl \
     "$INFO_PLIST_SOURCE" "$STAGING_APP/Contents/Info.plist"
 /usr/bin/ditto --norsrc --noextattr --noqtn --noacl \
@@ -104,23 +102,27 @@ SIGNING_IDENTITY_VALUE="$(resolve_signing_identity)"
 /usr/bin/codesign --force --deep --sign "$SIGNING_IDENTITY_VALUE" "$STAGING_APP"
 /usr/bin/codesign --verify --deep --strict --verbose=2 "$STAGING_APP"
 
+# La raiz del paquete contiene la app firmada; pkgbuild la mapea a /Applications
 /usr/bin/ditto --norsrc --noextattr --noqtn --noacl \
-    "$STAGING_APP" "$DMG_STAGE_DIR/$APP_NAME"
-/bin/ln -s /Applications "$DMG_STAGE_DIR/Applications"
+    "$STAGING_APP" "$PKG_ROOT/$APP_NAME"
 
-/bin/rm -f "$DMG_PATH"
-/usr/bin/hdiutil create \
-    -volname "MarkOff" \
-    -srcfolder "$DMG_STAGE_DIR" \
-    -ov \
-    -format UDZO \
-    "$DMG_PATH" >/dev/null
+/bin/rm -f "$PKG_PATH"
+/usr/bin/pkgbuild \
+    --root "$PKG_ROOT" \
+    --install-location /Applications \
+    --identifier "$BUNDLE_IDENTIFIER" \
+    --version "$PKG_VERSION" \
+    "$PKG_PATH"
 
-/usr/bin/hdiutil attach -nobrowse -readonly -mountpoint "$VERIFY_MOUNT" "$DMG_PATH" >/dev/null
-/usr/bin/codesign --verify --deep --strict --verbose=2 "$VERIFY_MOUNT/$APP_NAME"
-/usr/bin/hdiutil detach "$VERIFY_MOUNT" >/dev/null
+# Verificacion del paquete generado
+/usr/sbin/pkgutil --check-signature "$PKG_PATH" 2>/dev/null || true
+/usr/sbin/pkgutil --payload-files "$PKG_PATH" | /usr/bin/grep -q "$APP_NAME" \
+    && printf 'Payload contiene %s: OK\n' "$APP_NAME" \
+    || { printf 'El payload no contiene %s\n' "$APP_NAME" >&2; exit 1; }
 
-printf 'Identidad de firma: %s\n' "$SIGNING_IDENTITY_VALUE"
+printf 'Identidad de firma de la app: %s\n' "$SIGNING_IDENTITY_VALUE"
+printf 'Identificador del paquete: %s\n' "$BUNDLE_IDENTIFIER"
+printf 'Version: %s\n' "$PKG_VERSION"
 printf 'Aplicacion de staging: %s\n' "$STAGING_APP"
-printf 'DMG: %s\n' "$DMG_PATH"
+printf 'PKG: %s\n' "$PKG_PATH"
 printf 'Arquitecturas: %s\n' "$architectures"

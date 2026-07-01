@@ -59,7 +59,7 @@
 1. Run `git status` and confirm there is no uncommitted work you need to preserve.
 2. Run `git reset --hard HEAD~2` to remove both the phase-6 implementation commit and the phase-state sync commit.
 3. Delete the generated artifact if desired:
-   `rm -rf /Users/luispelaez/Documents/Inpaint_videos/dist`
+   `rm -rf ~/Documents/Inpaint_videos/dist`
 
 ## Next Phase Entry Conditions
 

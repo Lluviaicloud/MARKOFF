@@ -31,7 +31,7 @@
 
 - Red:
 - Output video truncation was real and reproducible.
-- Evidence: source sample `/Users/luispelaez/Desktop/video luna.MP4` had `format.duration=12.000000`; previous cleaned output had `format.duration=10.216009`.
+- Evidence: source sample `~/Desktop/video luna.MP4` had `format.duration=12.000000`; previous cleaned output had `format.duration=10.216009`.
 - Root cause: `ffmpeg` mux step used `-shortest`, so the final container was clipped to the shorter audio stream.
 - Red:
 - `ffmpeg` process execution could deadlock on large stderr output.
@@ -49,7 +49,7 @@
 - New regression test passed:
 - `automaticCleanupPreservesVideoDurationWhenAudioIsShorter`
 - Real evidence check:
-- source sample `/Users/luispelaez/Desktop/video luna.MP4` has `format.duration=12.000000`
+- source sample `~/Desktop/video luna.MP4` has `format.duration=12.000000`
 - post-fix muxed sample `/private/tmp/video-luna-audit-final.mp4` has `format.duration=12.000000`
 - post-fix muxed sample video stream has `duration=12.000000` and `nb_frames=312`
 - post-fix muxed sample audio stream remains shorter at `duration=10.216009`, but it no longer truncates the video

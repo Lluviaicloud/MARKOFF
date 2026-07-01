@@ -186,10 +186,15 @@ def build_rect_mask(mask_shape: tuple[int, int], rect: tuple[int, int, int, int]
     return mask
 
 
+CORNER_BRIGHTNESS_EVIDENCE_MIN = 0.20
+CORNER_EDGE_EVIDENCE_MIN = 0.15
+
+
 def detect_corner_watermark(
     score_map: np.ndarray,
     stability_map: np.ndarray,
     brightness_map: np.ndarray,
+    edge_mean: np.ndarray,
     edge_bias: np.ndarray,
     lower_bias: np.ndarray,
 ) -> AnalysisResult | None:
@@ -197,7 +202,19 @@ def detect_corner_watermark(
     if not candidates:
         return None
 
-    x, y, width, height, component_score, component_mask = candidates[0]
+    selected: tuple[int, int, int, int, float, np.ndarray] | None = None
+    for candidate in candidates:
+        _, _, _, _, _, candidate_mask = candidate
+        brightness_evidence = float(brightness_map[candidate_mask].mean())
+        edge_evidence = float(edge_mean[candidate_mask].mean())
+        if brightness_evidence >= CORNER_BRIGHTNESS_EVIDENCE_MIN or edge_evidence >= CORNER_EDGE_EVIDENCE_MIN:
+            selected = candidate
+            break
+
+    if selected is None:
+        return None
+
+    x, y, width, height, component_score, component_mask = selected
     padded_x = max(0, x - 10)
     padded_y = max(0, y - 10)
     padded_w = min(score_map.shape[1] - padded_x, max(width + 20, 48))
@@ -339,7 +356,7 @@ def detect_watermark(frames: list[np.ndarray]) -> AnalysisResult:
     score_map, stability_map, edge_mean, contrast, brightness_map, edge_bias, lower_bias = compute_feature_maps(frames)
     analyses: list[AnalysisResult] = []
 
-    corner_result = detect_corner_watermark(score_map, stability_map, brightness_map, edge_bias, lower_bias)
+    corner_result = detect_corner_watermark(score_map, stability_map, brightness_map, edge_mean, edge_bias, lower_bias)
     if corner_result is not None:
         analyses.append(corner_result)
 
@@ -390,7 +407,23 @@ def normalized_rect(rect: tuple[int, int, int, int], frame_shape: tuple[int, int
     }
 
 
-def process_video(input_path: str, output_video: str, analysis: AnalysisResult, original_size: tuple[int, int]) -> None:
+def write_progress(progress_file: str | None, fraction: float) -> None:
+    if not progress_file:
+        return
+    try:
+        with open(progress_file, "w", encoding="utf-8") as handle:
+            handle.write(f"{min(max(fraction, 0.0), 1.0):.4f}")
+    except OSError:
+        pass
+
+
+def process_video(
+    input_path: str,
+    output_video: str,
+    analysis: AnalysisResult,
+    original_size: tuple[int, int],
+    progress_file: str | None = None,
+) -> None:
     mask = resize_mask_to_original(analysis.mask, original_size)
 
     capture = cv2.VideoCapture(input_path)
@@ -401,6 +434,7 @@ def process_video(input_path: str, output_video: str, analysis: AnalysisResult, 
     fps = fps if fps and fps > 0 else 30.0
     width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT))
 
     os.makedirs(os.path.dirname(output_video), exist_ok=True)
     writer = cv2.VideoWriter(
@@ -412,6 +446,8 @@ def process_video(input_path: str, output_video: str, analysis: AnalysisResult, 
     if not writer.isOpened():
         raise RuntimeError("No se pudo crear el video procesado.")
 
+    write_progress(progress_file, 0.0)
+    processed = 0
     while True:
         ok, frame = capture.read()
         if not ok:
@@ -419,9 +455,14 @@ def process_video(input_path: str, output_video: str, analysis: AnalysisResult, 
 
         inpainted = cv2.inpaint(frame, mask, 7, cv2.INPAINT_TELEA)
         writer.write(inpainted)
+        processed += 1
+
+        if total_frames > 0 and (processed % 3 == 0 or processed == total_frames):
+            write_progress(progress_file, processed / total_frames)
 
     capture.release()
     writer.release()
+    write_progress(progress_file, 1.0)
 
 
 def emit_ok(result: AnalysisResult, frame_shape: tuple[int, int, int]) -> None:
@@ -451,6 +492,7 @@ def build_parser() -> argparse.ArgumentParser:
     process_parser.add_argument("--output-video", required=True)
     process_parser.add_argument("--mode", choices=("auto", "manual"), required=True)
     process_parser.add_argument("--rect")
+    process_parser.add_argument("--progress-file")
 
     return parser
 
@@ -473,7 +515,13 @@ def main() -> int:
         else:
             result = detect_watermark(frames)
 
-        process_video(args.input, args.output_video, result, original_size)
+        process_video(
+            args.input,
+            args.output_video,
+            result,
+            original_size,
+            progress_file=getattr(args, "progress_file", None),
+        )
         emit_ok(result, frames[0].shape)
         return 0
     except Exception as error:

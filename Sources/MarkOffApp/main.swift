@@ -1,13 +1,13 @@
 import SwiftUI
 
 @main
-struct InpaintVideosApp: App {
+struct MarkOffApp: App {
     @State private var viewModel = AppViewModel()
 
     var body: some Scene {
-        WindowGroup("Inpaint Videos") {
+        WindowGroup("MarkOff") {
             ContentView(viewModel: viewModel)
-                .frame(minWidth: 1100, minHeight: 760)
+                .frame(minWidth: 380, idealWidth: 460, minHeight: 560, idealHeight: 720)
         }
         .windowResizability(.contentSize)
     }

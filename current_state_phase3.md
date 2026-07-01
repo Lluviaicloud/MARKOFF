@@ -8,7 +8,7 @@
 - Automatic multi-region detection for watermark cleanup, including the lower-right overlay and the upper-right Instagram authorship mark
 - Swift-side support for multiple detected regions returned by the Python engine
 - Preview overlay updates so automatic mode can visualize all detected regions while preserving manual fallback editing
-- Real-sample validation against `/Users/luispelaez/Desktop/video luna.MP4`, specifically targeting the upper-right authorship watermark
+- Real-sample validation against `~/Desktop/video luna.MP4`, specifically targeting the upper-right authorship watermark
 
 ## Files Changed
 
@@ -30,11 +30,11 @@
 
 - Step 4 scenarios executed: 7 automated scenarios plus real visual validation on the user sample video
 - `swift test` passed with 7/7 scenarios after the multi-region changes
-- Real-sample validation on `/Users/luispelaez/Desktop/video luna.MP4`:
+- Real-sample validation on `~/Desktop/video luna.MP4`:
 - automatic detection returned two regions
 - lower-right decorative mark: detected
 - upper-right Instagram authorship mark: detected
-- cleaned output generated at `/Users/luispelaez/Documents/Inpaint_videos/video_luna_clean_multi_v2.mp4`
+- cleaned output generated at `~/Documents/Inpaint_videos/video_luna_clean_multi_v2.mp4`
 - visual check on the first frame confirmed removal of the upper-right authorship watermark without the earlier cloud smear artifact
 
 ## Step 5 Fixes
@@ -54,7 +54,7 @@
 
 1. Run `git status` and confirm only phase-3 files are present.
 2. Run `git reset --hard HEAD~2` to remove both the phase-3 implementation commit and the phase-state sync commit.
-3. Delete `/Users/luispelaez/Documents/Inpaint_videos/video_luna_clean_multi_v2.mp4` if you also want to remove the generated sample output.
+3. Delete `~/Documents/Inpaint_videos/video_luna_clean_multi_v2.mp4` if you also want to remove the generated sample output.
 
 ## Next Phase Entry Conditions
 

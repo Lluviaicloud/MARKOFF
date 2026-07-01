@@ -5,17 +5,17 @@
     <key>CFBundleDevelopmentRegion</key>
     <string>en</string>
     <key>CFBundleDisplayName</key>
-    <string>Inpaint Videos</string>
+    <string>MarkOff</string>
     <key>CFBundleExecutable</key>
-    <string>InpaintVideosApp</string>
+    <string>MarkOffApp</string>
     <key>CFBundleIconFile</key>
     <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
-    <string>com.luispelaez.inpaintvideos</string>
+    <string>com.luispelaez.markoff</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundleName</key>
-    <string>Inpaint Videos</string>
+    <string>MarkOff</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>

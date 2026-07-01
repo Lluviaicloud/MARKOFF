@@ -32,6 +32,7 @@ final class AppViewModel {
     var detectionConfidence: Double?
     var isProcessing = false
     var isDetecting = false
+    var cleanupProgress: Double?
     var statusMessage = "Selecciona un video MP4 para comenzar."
     var errorMessage: String?
 
@@ -85,6 +86,11 @@ final class AppViewModel {
             return
         }
 
+        if PathUtilities.resolvedPath(for: inputURL) == PathUtilities.resolvedPath(for: outputURL) {
+            errorMessage = "La ruta de salida no puede ser la misma que la del video de entrada."
+            return
+        }
+
         guard previewSize.width > 0, previewSize.height > 0 else {
             errorMessage = "No se pudo calcular la resolución de referencia."
             return
@@ -98,26 +104,54 @@ final class AppViewModel {
         }
 
         isProcessing = true
+        cleanupProgress = nil
         errorMessage = nil
         statusMessage = cleanupMode == .automatic
             ? "Detectando e inpaintando la marca automaticamente..."
             : "Inpaintando la zona marcada manualmente..."
 
+        let progressURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension("progress")
+
         Task {
+            let pollTask = startProgressPolling(from: progressURL)
+
+            defer {
+                pollTask.cancel()
+                try? FileManager.default.removeItem(at: progressURL)
+            }
+
             do {
                 let result = try await processor.cleanVideo(
                     inputURL: inputURL,
                     outputURL: outputURL,
                     manualRect: cleanupMode == .manual ? normalizedRect : nil,
-                    useAutomaticDetection: cleanupMode == .automatic
+                    useAutomaticDetection: cleanupMode == .automatic,
+                    progressURL: progressURL
                 )
                 applyDetection(result)
+                cleanupProgress = 1.0
                 isProcessing = false
+                cleanupProgress = nil
                 statusMessage = "Video limpio exportado en \(outputURL.path)."
             } catch {
                 isProcessing = false
+                cleanupProgress = nil
                 errorMessage = error.localizedDescription
                 statusMessage = "La exportacion ha fallado."
+            }
+        }
+    }
+
+    private func startProgressPolling(from progressURL: URL) -> Task<Void, Never> {
+        Task { [weak self] in
+            while !Task.isCancelled {
+                if let text = try? String(contentsOf: progressURL, encoding: .utf8),
+                   let value = Double(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                    self?.cleanupProgress = min(max(value, 0.0), 1.0)
+                }
+                try? await Task.sleep(for: .milliseconds(120))
             }
         }
     }

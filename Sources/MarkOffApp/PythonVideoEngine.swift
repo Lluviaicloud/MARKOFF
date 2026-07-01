@@ -1,7 +1,7 @@
 import CoreGraphics
 import Foundation
 
-struct WatermarkDetectionResult {
+struct WatermarkDetectionResult: Sendable {
     let normalizedRect: CGRect
     let normalizedRegions: [CGRect]
     let confidence: Double
@@ -11,25 +11,43 @@ struct VideoProcessor {
     private let pythonEngine = PythonVideoEngine()
 
     func detectWatermark(inputURL: URL) async throws -> WatermarkDetectionResult {
-        try pythonEngine.detectWatermark(inputURL: inputURL)
+        let engine = pythonEngine
+        return try await Task.detached {
+            try engine.detectWatermark(inputURL: inputURL)
+        }.value
     }
 
     func cleanVideo(
         inputURL: URL,
         outputURL: URL,
         manualRect: CGRect?,
-        useAutomaticDetection: Bool
+        useAutomaticDetection: Bool,
+        progressURL: URL? = nil
     ) async throws -> WatermarkDetectionResult {
-        try pythonEngine.processVideo(
-            inputURL: inputURL,
-            outputURL: outputURL,
-            manualRect: manualRect,
-            useAutomaticDetection: useAutomaticDetection
-        )
+        if PathUtilities.resolvedPath(for: inputURL) == PathUtilities.resolvedPath(for: outputURL) {
+            throw AppError("La ruta de salida no puede ser la misma que la del video de entrada.")
+        }
+
+        let engine = pythonEngine
+        return try await Task.detached {
+            try engine.processVideo(
+                inputURL: inputURL,
+                outputURL: outputURL,
+                manualRect: manualRect,
+                useAutomaticDetection: useAutomaticDetection,
+                progressURL: progressURL
+            )
+        }.value
     }
 }
 
-private struct PythonVideoEngine {
+enum PathUtilities {
+    static func resolvedPath(for url: URL) -> String {
+        url.resolvingSymlinksInPath().standardizedFileURL.path
+    }
+}
+
+private struct PythonVideoEngine: Sendable {
     func detectWatermark(inputURL: URL) throws -> WatermarkDetectionResult {
         let payload = try runPython(arguments: [
             "detect",
@@ -43,11 +61,20 @@ private struct PythonVideoEngine {
         inputURL: URL,
         outputURL: URL,
         manualRect: CGRect?,
-        useAutomaticDetection: Bool
+        useAutomaticDetection: Bool,
+        progressURL: URL? = nil
     ) throws -> WatermarkDetectionResult {
+        if PathUtilities.resolvedPath(for: inputURL) == PathUtilities.resolvedPath(for: outputURL) {
+            throw AppError("La ruta de salida no puede ser la misma que la del video de entrada.")
+        }
+
         let tempVideoURL = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString)
             .appendingPathExtension("mp4")
+
+        defer {
+            try? FileManager.default.removeItem(at: tempVideoURL)
+        }
 
         var arguments = [
             "process",
@@ -63,18 +90,27 @@ private struct PythonVideoEngine {
             ]
         }
 
+        if let progressURL {
+            arguments += ["--progress-file", progressURL.path]
+        }
+
         let payload = try runPython(arguments: arguments)
         try muxProcessedVideo(processedVideoURL: tempVideoURL, sourceVideoURL: inputURL, outputURL: outputURL)
         return try payload.asDetectionResult()
     }
 
     private func muxProcessedVideo(processedVideoURL: URL, sourceVideoURL: URL, outputURL: URL) throws {
-        if FileManager.default.fileExists(atPath: outputURL.path) {
-            try FileManager.default.removeItem(at: outputURL)
-        }
+        let fm = FileManager.default
+        let outputDirectory = outputURL.deletingLastPathComponent()
+        let tempFinalURL = outputDirectory
+            .appendingPathComponent(".inpaint-videos-\(UUID().uuidString)")
+            .appendingPathExtension("mp4")
 
+        var replaceCompleted = false
         defer {
-            try? FileManager.default.removeItem(at: processedVideoURL)
+            if !replaceCompleted {
+                try? fm.removeItem(at: tempFinalURL)
+            }
         }
 
         let result = try ProcessExecutor.run(
@@ -89,7 +125,7 @@ private struct PythonVideoEngine {
                 "-preset", "medium",
                 "-crf", "18",
                 "-c:a", "copy",
-                outputURL.path,
+                tempFinalURL.path,
             ]
         )
 
@@ -97,6 +133,13 @@ private struct PythonVideoEngine {
             let message = String(decoding: result.stderr, as: UTF8.self)
             throw AppError("ffmpeg no pudo recombinar el video procesado.\n\(message)")
         }
+
+        if fm.fileExists(atPath: outputURL.path) {
+            _ = try fm.replaceItemAt(outputURL, withItemAt: tempFinalURL)
+        } else {
+            try fm.moveItem(at: tempFinalURL, to: outputURL)
+        }
+        replaceCompleted = true
     }
 
     private func runPython(arguments: [String]) throws -> PythonResponsePayload {

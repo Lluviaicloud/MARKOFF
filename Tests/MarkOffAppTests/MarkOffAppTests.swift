@@ -2,9 +2,9 @@ import AVFoundation
 import CoreGraphics
 import Foundation
 import Testing
-@testable import InpaintVideosApp
+@testable import MarkOffApp
 
-struct InpaintVideosAppTests {
+struct MarkOffAppTests {
     @Test
     func clampRectKeepsSelectionInsideBounds() {
         let rect = CGRect(x: -10, y: 40, width: 500, height: 500)
@@ -58,6 +58,23 @@ struct InpaintVideosAppTests {
         #expect(detection.normalizedRegions.count >= 2)
         #expect(detection.normalizedRegions.contains(where: { $0.origin.x > 0.55 && $0.origin.y > 0.55 }))
         #expect(detection.normalizedRegions.contains(where: { $0.origin.x > 0.55 && $0.origin.y < 0.20 }))
+    }
+
+    @Test
+    func automaticDetectionRejectsFalsePositiveCornerOnDarkFrame() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        let inputURL = tempDirectory.appendingPathComponent("input_no_corner.mp4")
+        try generateVideoWithoutCornerWatermark(at: inputURL)
+
+        let detection = try await VideoProcessor().detectWatermark(inputURL: inputURL)
+
+        let hasTopRight = detection.normalizedRegions.contains(where: { $0.origin.x > 0.55 && $0.origin.y < 0.20 })
+        let hasBottomRight = detection.normalizedRegions.contains(where: { $0.origin.x > 0.55 && $0.origin.y > 0.55 })
+
+        #expect(hasTopRight)
+        #expect(!hasBottomRight)
     }
 
     @Test
@@ -185,6 +202,58 @@ struct InpaintVideosAppTests {
     }
 
     @Test
+    func cleanupRejectsSameInputAndOutputPath() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        let sharedURL = tempDirectory.appendingPathComponent("shared.mp4")
+        try generateSampleVideo(at: sharedURL)
+
+        let originalAttributes = try FileManager.default.attributesOfItem(atPath: sharedURL.path)
+        let originalSize = (originalAttributes[.size] as? NSNumber)?.intValue ?? 0
+
+        let processor = VideoProcessor()
+        await #expect(throws: Error.self) {
+            _ = try await processor.cleanVideo(
+                inputURL: sharedURL,
+                outputURL: sharedURL,
+                manualRect: nil,
+                useAutomaticDetection: true
+            )
+        }
+
+        let afterAttributes = try FileManager.default.attributesOfItem(atPath: sharedURL.path)
+        let afterSize = (afterAttributes[.size] as? NSNumber)?.intValue ?? 0
+        #expect(afterSize == originalSize)
+        #expect(afterSize > 0)
+    }
+
+    @Test
+    func cleanupPreservesExistingOutputWhenProcessingFails() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        let inputURL = tempDirectory.appendingPathComponent("bogus.mp4")
+        let outputURL = tempDirectory.appendingPathComponent("existing.mp4")
+        try Data("not a real video".utf8).write(to: inputURL)
+        let sentinelPayload = Data("preserved-output-sentinel-bytes".utf8)
+        try sentinelPayload.write(to: outputURL)
+
+        let processor = VideoProcessor()
+        await #expect(throws: Error.self) {
+            _ = try await processor.cleanVideo(
+                inputURL: inputURL,
+                outputURL: outputURL,
+                manualRect: nil,
+                useAutomaticDetection: true
+            )
+        }
+
+        let survived = try Data(contentsOf: outputURL)
+        #expect(survived == sentinelPayload)
+    }
+
+    @Test
     func manualCleanupOverwritesExistingOutput() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
@@ -226,6 +295,27 @@ struct InpaintVideosAppTests {
         guard result.terminationStatus == 0 else {
             let message = String(decoding: result.stderr, as: UTF8.self)
             throw AppError("No se pudo generar el video de prueba.\n\(message)")
+        }
+    }
+
+    private func generateVideoWithoutCornerWatermark(at url: URL) throws {
+        let ffmpegURL = try ToolLocator.resolve("ffmpeg")
+        let result = try ProcessExecutor.run(
+            executableURL: ffmpegURL,
+            arguments: [
+                "-y",
+                "-f", "lavfi",
+                "-i", "color=c=black:s=320x240:d=1",
+                "-vf", "drawbox=x='20+mod(t*120,140)':y=34:w=72:h=72:color=gray@1:t=fill,drawbox=x=116:y='70+mod(t*80,86)':w=36:h=36:color=blue@1:t=fill,drawbox=x=178:y=34:w=28:h=28:color=white@1:t=fill,drawbox=x=214:y=40:w=74:h=7:color=white@1:t=fill,drawbox=x=214:y=54:w=92:h=7:color=white@1:t=fill",
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                url.path,
+            ]
+        )
+
+        guard result.terminationStatus == 0 else {
+            let message = String(decoding: result.stderr, as: UTF8.self)
+            throw AppError("No se pudo generar el video de prueba sin marca de esquina.\n\(message)")
         }
     }
 

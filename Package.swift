@@ -2,17 +2,17 @@
 import PackageDescription
 
 let package = Package(
-    name: "InpaintVideos",
+    name: "MarkOff",
     platforms: [
         .macOS(.v15),
     ],
     products: [
-        .executable(name: "InpaintVideosApp", targets: ["InpaintVideosApp"]),
+        .executable(name: "MarkOffApp", targets: ["MarkOffApp"]),
     ],
     targets: [
         .executableTarget(
-            name: "InpaintVideosApp",
-            path: "Sources/InpaintVideosApp",
+            name: "MarkOffApp",
+            path: "Sources/MarkOffApp",
             resources: [
                 .copy("../../Scripts"),
             ],
@@ -21,9 +21,9 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "InpaintVideosAppTests",
-            dependencies: ["InpaintVideosApp"],
-            path: "Tests/InpaintVideosAppTests"
+            name: "MarkOffAppTests",
+            dependencies: ["MarkOffApp"],
+            path: "Tests/MarkOffAppTests"
         ),
     ]
 )
