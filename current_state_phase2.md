@@ -1,6 +1,7 @@
 # Current State Phase 2
 
-- Phase 2 closing commit date and status: 2026-07-01 13:33:17 CEST, READY TO COMMIT
+- Phase 2 closing commit date and status: 2026-07-01 13:34:46 CEST, COMMITTED
+- Phase 2 closing commit reference: `67091af` (`Phase 2: automatic detection and OpenCV inpainting`)
 
 ## What Was Built
 
@@ -63,7 +64,7 @@
 ## Rollback Instructions
 
 1. Run `git status` and confirm only phase-2 files are present.
-2. Run `git reset --hard HEAD~1` to drop the phase-2 commit once it exists.
+2. Run `git reset --hard HEAD~2` to drop both the phase-2 implementation commit and the phase-state sync commit.
 3. If you also want to remove the generated sample output, delete `/Users/luispelaez/Documents/Inpaint_videos/video_luna_clean_phase2.mp4`.
 
 ## Next Phase Entry Conditions
