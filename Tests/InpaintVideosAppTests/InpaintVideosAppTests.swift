@@ -1,3 +1,4 @@
+import AVFoundation
 import CoreGraphics
 import Foundation
 import Testing
@@ -30,7 +31,7 @@ struct InpaintVideosAppTests {
     }
 
     @Test
-    func ffprobeFailsForNonVideoFile() async throws {
+    func detectionFailsForNonVideoFile() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
         let bogusURL = tempDirectory.appendingPathComponent("bogus.mp4")
@@ -39,16 +40,29 @@ struct InpaintVideosAppTests {
         let processor = VideoProcessor()
 
         await #expect(throws: Error.self) {
-            try await processor.cleanVideo(
-                inputURL: bogusURL,
-                outputURL: tempDirectory.appendingPathComponent("out.mp4"),
-                normalizedRect: CGRect(x: 0.1, y: 0.1, width: 0.2, height: 0.2)
-            )
+            try await processor.detectWatermark(inputURL: bogusURL)
         }
     }
 
     @Test
-    func cleanupGeneratesOutputVideo() async throws {
+    func automaticDetectionFindsBottomRightWatermark() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        let inputURL = tempDirectory.appendingPathComponent("input.mp4")
+        try generateSampleVideo(at: inputURL)
+
+        let detection = try await VideoProcessor().detectWatermark(inputURL: inputURL)
+
+        #expect(detection.confidence > 0.45)
+        #expect(detection.normalizedRect.origin.x > 0.55)
+        #expect(detection.normalizedRect.origin.y > 0.55)
+        #expect(detection.normalizedRect.width > 0.05)
+        #expect(detection.normalizedRect.height > 0.05)
+    }
+
+    @Test
+    func automaticCleanupGeneratesOutputVideo() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
 
@@ -58,12 +72,14 @@ struct InpaintVideosAppTests {
         try generateSampleVideo(at: inputURL)
 
         let processor = VideoProcessor()
-        try await processor.cleanVideo(
+        let result = try await processor.cleanVideo(
             inputURL: inputURL,
             outputURL: outputURL,
-            normalizedRect: CGRect(x: 0.7, y: 0.7, width: 0.2, height: 0.15)
+            manualRect: nil,
+            useAutomaticDetection: true
         )
 
+        #expect(result.confidence > 0.45)
         #expect(FileManager.default.fileExists(atPath: outputURL.path))
         let attributes = try FileManager.default.attributesOfItem(atPath: outputURL.path)
         let fileSize = attributes[.size] as? NSNumber ?? 0
@@ -71,7 +87,34 @@ struct InpaintVideosAppTests {
     }
 
     @Test
-    func cleanupOverwritesExistingOutput() async throws {
+    func automaticCleanupReducesWatermarkBrightness() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        let inputURL = tempDirectory.appendingPathComponent("input.mp4")
+        let outputURL = tempDirectory.appendingPathComponent("output.mp4")
+
+        try generateSampleVideo(at: inputURL)
+
+        let processor = VideoProcessor()
+        _ = try await processor.cleanVideo(
+            inputURL: inputURL,
+            outputURL: outputURL,
+            manualRect: nil,
+            useAutomaticDetection: true
+        )
+
+        let inputFrame = try await firstFrame(from: inputURL)
+        let outputFrame = try await firstFrame(from: outputURL)
+        let knownWatermarkRect = CGRect(x: 244, y: 184, width: 42, height: 42)
+        let inputBrightPixels = brightPixelCount(in: inputFrame, rect: knownWatermarkRect, threshold: 240)
+        let outputBrightPixels = brightPixelCount(in: outputFrame, rect: knownWatermarkRect, threshold: 240)
+
+        #expect(Double(outputBrightPixels) < Double(inputBrightPixels) * 0.20)
+    }
+
+    @Test
+    func manualCleanupOverwritesExistingOutput() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
 
@@ -82,10 +125,11 @@ struct InpaintVideosAppTests {
         try Data("old".utf8).write(to: outputURL)
 
         let processor = VideoProcessor()
-        try await processor.cleanVideo(
+        _ = try await processor.cleanVideo(
             inputURL: inputURL,
             outputURL: outputURL,
-            normalizedRect: CGRect(x: 0.68, y: 0.68, width: 0.22, height: 0.18)
+            manualRect: CGRect(x: 0.68, y: 0.68, width: 0.22, height: 0.18),
+            useAutomaticDetection: false
         )
 
         let attributes = try FileManager.default.attributesOfItem(atPath: outputURL.path)
@@ -101,7 +145,7 @@ struct InpaintVideosAppTests {
             "-y",
             "-f", "lavfi",
             "-i", "color=c=black:s=320x240:d=1",
-            "-vf", "drawbox=x=220:y=170:w=70:h=35:color=white:t=fill",
+            "-vf", "drawbox=x='20+mod(t*120,140)':y=34:w=72:h=72:color=gray@1:t=fill,drawbox=x=116:y='70+mod(t*80,86)':w=36:h=36:color=blue@1:t=fill,drawbox=x=244:y=184:w=42:h=42:color=white@1:t=fill",
             "-c:v", "libx264",
             "-pix_fmt", "yuv420p",
             url.path,
@@ -117,5 +161,94 @@ struct InpaintVideosAppTests {
             let message = String(decoding: errorData, as: UTF8.self)
             throw AppError("No se pudo generar el video de prueba.\n\(message)")
         }
+    }
+
+    private func firstFrame(from url: URL) async throws -> CGImage {
+        let asset = AVURLAsset(url: url)
+        let generator = AVAssetImageGenerator(asset: asset)
+        generator.appliesPreferredTrackTransform = true
+        return try await withCheckedThrowingContinuation { continuation in
+            generator.generateCGImageAsynchronously(for: .zero) { image, _, error in
+                if let image {
+                    continuation.resume(returning: image)
+                    return
+                }
+
+                if let error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+
+                continuation.resume(throwing: AppError("No se pudo generar el frame de prueba."))
+            }
+        }
+    }
+
+    private func absoluteRect(from normalizedRect: CGRect, in image: CGImage) -> CGRect {
+        CGRect(
+            x: normalizedRect.origin.x * CGFloat(image.width),
+            y: normalizedRect.origin.y * CGFloat(image.height),
+            width: normalizedRect.width * CGFloat(image.width),
+            height: normalizedRect.height * CGFloat(image.height)
+        )
+    }
+
+    private func meanLuminance(in image: CGImage, rect: CGRect) -> Double {
+        guard let data = image.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            return 0
+        }
+
+        let bytesPerRow = image.bytesPerRow
+        let bytesPerPixel = image.bitsPerPixel / 8
+        let startX = max(0, Int(rect.minX.rounded(.down)))
+        let endX = min(image.width, Int(rect.maxX.rounded(.up)))
+        let startY = max(0, Int(rect.minY.rounded(.down)))
+        let endY = min(image.height, Int(rect.maxY.rounded(.up)))
+
+        var total = 0.0
+        var count = 0
+
+        for y in startY..<endY {
+            for x in startX..<endX {
+                let offset = y * bytesPerRow + x * bytesPerPixel
+                let red = Double(bytes[offset])
+                let green = Double(bytes[offset + 1])
+                let blue = Double(bytes[offset + 2])
+                total += (0.2126 * red) + (0.7152 * green) + (0.0722 * blue)
+                count += 1
+            }
+        }
+
+        return count > 0 ? total / Double(count) : 0
+    }
+
+    private func brightPixelCount(in image: CGImage, rect: CGRect, threshold: UInt8) -> Int {
+        guard let data = image.dataProvider?.data,
+              let bytes = CFDataGetBytePtr(data) else {
+            return 0
+        }
+
+        let bytesPerRow = image.bytesPerRow
+        let bytesPerPixel = image.bitsPerPixel / 8
+        let startX = max(0, Int(rect.minX.rounded(.down)))
+        let endX = min(image.width, Int(rect.maxX.rounded(.up)))
+        let startY = max(0, Int(rect.minY.rounded(.down)))
+        let endY = min(image.height, Int(rect.maxY.rounded(.up)))
+
+        var total = 0
+        for y in startY..<endY {
+            for x in startX..<endX {
+                let offset = y * bytesPerRow + x * bytesPerPixel
+                let red = bytes[offset]
+                let green = bytes[offset + 1]
+                let blue = bytes[offset + 2]
+                if red >= threshold && green >= threshold && blue >= threshold {
+                    total += 1
+                }
+            }
+        }
+
+        return total
     }
 }

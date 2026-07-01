@@ -33,10 +33,15 @@ struct ContentView: View {
             }
             .disabled(viewModel.inputURL == nil)
 
+            Button(viewModel.isDetecting ? "Detectando..." : "Detectar Marca") {
+                viewModel.detectWatermark()
+            }
+            .disabled(viewModel.inputURL == nil || viewModel.previewImage == nil || viewModel.isDetecting || viewModel.isProcessing)
+
             Button(viewModel.isProcessing ? "Procesando..." : "Limpiar Video") {
                 viewModel.runCleanup()
             }
-            .disabled(viewModel.inputURL == nil || viewModel.previewImage == nil || viewModel.isProcessing)
+            .disabled(viewModel.inputURL == nil || viewModel.previewImage == nil || viewModel.isProcessing || viewModel.isDetecting)
 
             Spacer()
         }
@@ -90,6 +95,25 @@ struct ContentView: View {
 
             Divider()
 
+            Picker("Modo", selection: $viewModel.cleanupMode) {
+                ForEach(AppViewModel.CleanupMode.allCases) { mode in
+                    Text(mode.title).tag(mode)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            if let detectionConfidence = viewModel.detectionConfidence {
+                LabeledContent("Confianza") {
+                    Text("\(Int((detectionConfidence * 100).rounded()))%")
+                }
+            } else {
+                LabeledContent("Confianza") {
+                    Text("Sin detectar")
+                }
+            }
+
+            Divider()
+
             RectField(title: "X", value: $viewModel.watermarkRect.origin.x)
             RectField(title: "Y", value: $viewModel.watermarkRect.origin.y)
             RectField(title: "Ancho", value: $viewModel.watermarkRect.size.width)
@@ -97,7 +121,7 @@ struct ContentView: View {
 
             Divider()
 
-            Text("La marca debe quedar totalmente contenida dentro del rectangulo rojo.")
+            Text("Auto usa deteccion e inpainting reales. Manual usa tu rectangulo actual como guia de mascara.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 

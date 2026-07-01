@@ -4,18 +4,21 @@ Aplicacion local para macOS Apple Silicon que limpia marcas de agua de videos `.
 
 ## Estado actual
 
-Esta primera fase implementa:
+La fase 2 implementa:
 
 - Seleccion de video de entrada `.mp4`
 - Vista previa del primer frame
-- Marcado manual del rectangulo donde aparece la marca de agua
-- Exportacion de un nuevo video usando `ffmpeg` y el filtro `delogo`
+- Deteccion automatica de una region candidata para la marca de agua
+- Inpainting real por frame con OpenCV (`cv2.inpaint`)
+- Modo manual de respaldo con rectangulo editable
+- Exportacion de un nuevo video con audio remuxeado desde el original
 
 ## Requisitos
 
 - macOS con Apple Silicon
 - Xcode 26 o superior
 - `ffmpeg` y `ffprobe` instalados en `/opt/homebrew/bin`
+- Entorno Python local en `.venv` con `numpy` y `opencv-python-headless`
 
 ## Ejecutar
 
@@ -23,6 +26,15 @@ Esta primera fase implementa:
 swift run InpaintVideosApp
 ```
 
-## Alcance de la fase 1
+## Preparar dependencias Python
 
-La deteccion automatica de la marca y el inpainting basado en IA no estan implementados todavia. La arquitectura deja preparada una fase posterior para incorporar OpenCV o modelos dedicados.
+```bash
+python3 -m venv .venv
+./.venv/bin/pip install numpy opencv-python-headless
+```
+
+## Alcance actual
+
+- La deteccion automatica actual es heuristica y esta optimizada para overlays pequenos y persistentes, especialmente cercanos al borde
+- El motor de eliminacion usa inpainting clasico de OpenCV, no un modelo generativo entrenado
+- Si la autodeteccion falla o la confianza no es suficiente, la app permite correccion manual antes de exportar

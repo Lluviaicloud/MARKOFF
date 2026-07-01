@@ -20,7 +20,10 @@ let package = Package(
         .testTarget(
             name: "InpaintVideosAppTests",
             dependencies: ["InpaintVideosApp"],
-            path: "Tests/InpaintVideosAppTests"
+            path: "Tests/InpaintVideosAppTests",
+            resources: [
+                .copy("../../Scripts"),
+            ]
         ),
     ]
 )
