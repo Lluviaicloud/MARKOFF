@@ -1,6 +1,7 @@
 # Current State Phase 6
 
-- Phase 6 closing commit date and status: 2026-07-01 14:53 CEST, READY TO COMMIT
+- Phase 6 closing commit date and status: 2026-07-01 14:54 CEST, COMMITTED
+- Phase 6 closing commit reference: `5161856` (`Phase 6: add custom app icon`)
 - Phase 6 scope: integration of the custom macOS app icon into the packaged bundle and DMG flow
 
 ## What Was Built
@@ -55,12 +56,9 @@
 
 ## Rollback Instructions
 
-1. Run `git status` and confirm there is no unrelated work to preserve.
-2. Remove the icon resources:
-   `rm -rf Packaging/AppIcon.icns Packaging/AppIcon.iconset Packaging/AppIcon.source.png`
-3. Revert the packaging metadata changes:
-   `git checkout -- .gitignore Packaging/InpaintVideosApp-Info.plist README.md Scripts/build_release_bundle.sh`
-4. Delete the generated artifact if desired:
+1. Run `git status` and confirm there is no uncommitted work you need to preserve.
+2. Run `git reset --hard HEAD~2` to remove both the phase-6 implementation commit and the phase-state sync commit.
+3. Delete the generated artifact if desired:
    `rm -rf /Users/luispelaez/Documents/Inpaint_videos/dist`
 
 ## Next Phase Entry Conditions
