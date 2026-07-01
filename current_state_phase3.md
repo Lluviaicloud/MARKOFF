@@ -1,6 +1,7 @@
 # Current State Phase 3
 
-- Phase 3 closing commit date and status: 2026-07-01 13:51:17 CEST, READY TO COMMIT
+- Phase 3 closing commit date and status: 2026-07-01 13:53:23 CEST, COMMITTED
+- Phase 3 closing commit reference: `94dc71b` (`Phase 3: detect and clean multiple watermark regions`)
 
 ## What Was Built
 
@@ -52,7 +53,7 @@
 ## Rollback Instructions
 
 1. Run `git status` and confirm only phase-3 files are present.
-2. Run `git reset --hard HEAD~1` to remove the phase-3 implementation commit once it exists.
+2. Run `git reset --hard HEAD~2` to remove both the phase-3 implementation commit and the phase-state sync commit.
 3. Delete `/Users/luispelaez/Documents/Inpaint_videos/video_luna_clean_multi_v2.mp4` if you also want to remove the generated sample output.
 
 ## Next Phase Entry Conditions
