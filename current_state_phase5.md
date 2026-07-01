@@ -1,6 +1,7 @@
 # Current State Phase 5
 
-- Phase 5 closing commit date and status: 2026-07-01 14:49 CEST, READY TO COMMIT
+- Phase 5 closing commit date and status: 2026-07-01 14:50 CEST, COMMITTED
+- Phase 5 closing commit reference: `492f609` (`Phase 5: harden macOS packaging pipeline`)
 - Phase 5 scope: hardening of the macOS packaging pipeline for the v1.0 internal distribution build
 
 ## What Was Built
@@ -67,11 +68,9 @@
 
 ## Rollback Instructions
 
-1. Run `git status` and confirm only phase-5 packaging files are pending.
-2. Remove `Packaging/InpaintVideosApp-Info.plist` and `Scripts/build_release_bundle.sh`.
-3. Revert the phase-5 source and documentation changes:
-   `git checkout -- .gitignore README.md Sources/InpaintVideosApp/ProjectPaths.swift Tests/InpaintVideosAppTests/InpaintVideosAppTests.swift`
-4. Delete the generated packaging artifact:
+1. Run `git status` and confirm there is no uncommitted work you need to preserve.
+2. Run `git reset --hard HEAD~2` to remove both the phase-5 implementation commit and the phase-state sync commit.
+3. Delete the generated packaging artifact if still present:
    `rm -rf /Users/luispelaez/Documents/Inpaint_videos/dist`
 
 ## Next Phase Entry Conditions
