@@ -86,6 +86,29 @@ struct InpaintVideosAppTests {
     }
 
     @Test
+    func automaticCleanupPreservesVideoDurationWhenAudioIsShorter() async throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
+
+        let inputURL = tempDirectory.appendingPathComponent("input-with-short-audio.mp4")
+        let outputURL = tempDirectory.appendingPathComponent("output.mp4")
+
+        try generateSampleVideoWithShortAudio(at: inputURL)
+
+        _ = try await VideoProcessor().cleanVideo(
+            inputURL: inputURL,
+            outputURL: outputURL,
+            manualRect: nil,
+            useAutomaticDetection: true
+        )
+
+        let inputDuration = try videoDuration(at: inputURL)
+        let outputDuration = try videoDuration(at: outputURL)
+
+        #expect(outputDuration >= inputDuration - 0.05)
+    }
+
+    @Test
     func automaticCleanupReducesWatermarkBrightness() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
@@ -141,27 +164,47 @@ struct InpaintVideosAppTests {
 
     private func generateSampleVideo(at url: URL) throws {
         let ffmpegURL = try ToolLocator.resolve("ffmpeg")
-        let process = Process()
-        process.executableURL = ffmpegURL
-        process.arguments = [
-            "-y",
-            "-f", "lavfi",
-            "-i", "color=c=black:s=320x240:d=1",
-            "-vf", "drawbox=x='20+mod(t*120,140)':y=34:w=72:h=72:color=gray@1:t=fill,drawbox=x=116:y='70+mod(t*80,86)':w=36:h=36:color=blue@1:t=fill,drawbox=x=244:y=184:w=42:h=42:color=white@1:t=fill,drawbox=x=178:y=34:w=28:h=28:color=white@1:t=fill,drawbox=x=214:y=40:w=74:h=7:color=white@1:t=fill,drawbox=x=214:y=54:w=92:h=7:color=white@1:t=fill",
-            "-c:v", "libx264",
-            "-pix_fmt", "yuv420p",
-            url.path,
-        ]
+        let result = try ProcessExecutor.run(
+            executableURL: ffmpegURL,
+            arguments: [
+                "-y",
+                "-f", "lavfi",
+                "-i", "color=c=black:s=320x240:d=1",
+                "-vf", "drawbox=x='20+mod(t*120,140)':y=34:w=72:h=72:color=gray@1:t=fill,drawbox=x=116:y='70+mod(t*80,86)':w=36:h=36:color=blue@1:t=fill,drawbox=x=244:y=184:w=42:h=42:color=white@1:t=fill,drawbox=x=178:y=34:w=28:h=28:color=white@1:t=fill,drawbox=x=214:y=40:w=74:h=7:color=white@1:t=fill,drawbox=x=214:y=54:w=92:h=7:color=white@1:t=fill",
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                url.path,
+            ]
+        )
 
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-        try process.run()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let message = String(decoding: errorData, as: UTF8.self)
+        guard result.terminationStatus == 0 else {
+            let message = String(decoding: result.stderr, as: UTF8.self)
             throw AppError("No se pudo generar el video de prueba.\n\(message)")
+        }
+    }
+
+    private func generateSampleVideoWithShortAudio(at url: URL) throws {
+        let ffmpegURL = try ToolLocator.resolve("ffmpeg")
+        let result = try ProcessExecutor.run(
+            executableURL: ffmpegURL,
+            arguments: [
+                "-y",
+                "-f", "lavfi",
+                "-i", "color=c=black:s=320x240:d=1",
+                "-f", "lavfi",
+                "-i", "sine=frequency=660:duration=0.55",
+                "-vf", "drawbox=x=244:y=184:w=42:h=42:color=white@1:t=fill",
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-c:a", "aac",
+                "-shortest",
+                url.path,
+            ]
+        )
+
+        guard result.terminationStatus == 0 else {
+            let message = String(decoding: result.stderr, as: UTF8.self)
+            throw AppError("No se pudo generar el video de prueba con audio corto.\n\(message)")
         }
     }
 
@@ -252,5 +295,30 @@ struct InpaintVideosAppTests {
         }
 
         return total
+    }
+
+    private func videoDuration(at url: URL) throws -> Double {
+        let ffprobeURL = try ToolLocator.resolve("ffprobe")
+        let result = try ProcessExecutor.run(
+            executableURL: ffprobeURL,
+            arguments: [
+                "-v", "error",
+                "-show_entries", "format=duration",
+                "-of", "default=noprint_wrappers=1:nokey=1",
+                url.path,
+            ]
+        )
+
+        guard result.terminationStatus == 0 else {
+            let message = String(decoding: result.stderr, as: UTF8.self)
+            throw AppError("No se pudo medir la duracion del video.\n\(message)")
+        }
+
+        let value = String(decoding: result.stdout, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let duration = Double(value) else {
+            throw AppError("La duracion reportada no es valida.")
+        }
+
+        return duration
     }
 }

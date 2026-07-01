@@ -77,57 +77,41 @@ private struct PythonVideoEngine {
             try? FileManager.default.removeItem(at: processedVideoURL)
         }
 
-        let process = Process()
-        process.executableURL = try ToolLocator.resolve("ffmpeg")
-        process.arguments = [
-            "-y",
-            "-i", processedVideoURL.path,
-            "-i", sourceVideoURL.path,
-            "-map", "0:v:0",
-            "-map", "1:a?",
-            "-c:v", "libx264",
-            "-preset", "medium",
-            "-crf", "18",
-            "-c:a", "copy",
-            "-shortest",
-            outputURL.path,
-        ]
+        let result = try ProcessExecutor.run(
+            executableURL: try ToolLocator.resolve("ffmpeg"),
+            arguments: [
+                "-y",
+                "-i", processedVideoURL.path,
+                "-i", sourceVideoURL.path,
+                "-map", "0:v:0",
+                "-map", "1:a?",
+                "-c:v", "libx264",
+                "-preset", "medium",
+                "-crf", "18",
+                "-c:a", "copy",
+                outputURL.path,
+            ]
+        )
 
-        let errorPipe = Pipe()
-        process.standardError = errorPipe
-        try process.run()
-        process.waitUntilExit()
-
-        if process.terminationStatus != 0 {
-            let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-            let message = String(decoding: errorData, as: UTF8.self)
+        if result.terminationStatus != 0 {
+            let message = String(decoding: result.stderr, as: UTF8.self)
             throw AppError("ffmpeg no pudo recombinar el video procesado.\n\(message)")
         }
     }
 
     private func runPython(arguments: [String]) throws -> PythonResponsePayload {
-        let process = Process()
-        process.executableURL = try resolvePythonInterpreter()
-        process.arguments = [ProjectPaths.pythonScript.path] + arguments
-
         var environment = ProcessInfo.processInfo.environment
         environment["PYTHONUNBUFFERED"] = "1"
-        process.environment = environment
+        let result = try ProcessExecutor.run(
+            executableURL: try resolvePythonInterpreter(),
+            arguments: [ProjectPaths.pythonScript.path] + arguments,
+            environment: environment
+        )
 
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
+        let output = String(decoding: result.stdout, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        let error = String(decoding: result.stderr, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
 
-        try process.run()
-        process.waitUntilExit()
-
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(decoding: outputData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-        let error = String(decoding: errorData, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
-
-        guard process.terminationStatus == 0 else {
+        guard result.terminationStatus == 0 else {
             if let payload = try? JSONDecoder().decode(PythonResponsePayload.self, from: Data(output.utf8)) {
                 throw AppError(payload.message ?? "El pipeline Python ha fallado.")
             }

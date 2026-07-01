@@ -13,6 +13,9 @@ let package = Package(
         .executableTarget(
             name: "InpaintVideosApp",
             path: "Sources/InpaintVideosApp",
+            resources: [
+                .copy("../../Scripts"),
+            ],
             swiftSettings: [
                 .unsafeFlags(["-parse-as-library"]),
             ]
@@ -20,10 +23,7 @@ let package = Package(
         .testTarget(
             name: "InpaintVideosAppTests",
             dependencies: ["InpaintVideosApp"],
-            path: "Tests/InpaintVideosAppTests",
-            resources: [
-                .copy("../../Scripts"),
-            ]
+            path: "Tests/InpaintVideosAppTests"
         ),
     ]
 )
