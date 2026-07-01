@@ -5,6 +5,8 @@ struct VideoPreviewCanvas: View {
     let image: NSImage
     let imageSize: CGSize
     @Binding var rect: CGRect
+    let overlayRects: [CGRect]
+    let isEditable: Bool
 
     @State private var dragOriginRect: CGRect = .zero
 
@@ -20,40 +22,63 @@ struct VideoPreviewCanvas: View {
                     .position(x: layout.renderOrigin.x + layout.renderSize.width / 2,
                               y: layout.renderOrigin.y + layout.renderSize.height / 2)
 
-                Rectangle()
-                    .path(in: layout.displayRect(for: rect))
-                    .stroke(Color.red, lineWidth: 3)
+                ForEach(Array(overlayRects.enumerated()), id: \.offset) { _, overlayRect in
+                    Rectangle()
+                        .path(in: layout.displayRect(for: overlayRect))
+                        .stroke(Color.orange, lineWidth: 3)
 
-                Rectangle()
-                    .fill(Color.red.opacity(0.14))
-                    .frame(
-                        width: layout.displayRect(for: rect).width,
-                        height: layout.displayRect(for: rect).height
-                    )
-                    .position(
-                        x: layout.displayRect(for: rect).midX,
-                        y: layout.displayRect(for: rect).midY
-                    )
+                    Rectangle()
+                        .fill(Color.orange.opacity(0.14))
+                        .frame(
+                            width: layout.displayRect(for: overlayRect).width,
+                            height: layout.displayRect(for: overlayRect).height
+                        )
+                        .position(
+                            x: layout.displayRect(for: overlayRect).midX,
+                            y: layout.displayRect(for: overlayRect).midY
+                        )
+                }
+
+                if isEditable {
+                    Rectangle()
+                        .path(in: layout.displayRect(for: rect))
+                        .stroke(Color.red, lineWidth: 3)
+
+                    Rectangle()
+                        .fill(Color.red.opacity(0.14))
+                        .frame(
+                            width: layout.displayRect(for: rect).width,
+                            height: layout.displayRect(for: rect).height
+                        )
+                        .position(
+                            x: layout.displayRect(for: rect).midX,
+                            y: layout.displayRect(for: rect).midY
+                        )
+                }
             }
             .contentShape(Rectangle())
-            .gesture(
-                DragGesture()
-                    .onChanged { gesture in
-                        if dragOriginRect == .zero {
-                            dragOriginRect = rect
-                        }
-                        let translated = WatermarkGeometry.translatedRect(
-                            dragOriginRect,
-                            translation: gesture.translation,
-                            scale: layout.scale,
-                            bounds: imageSize
-                        )
-                        rect = translated
+            .gesture(DragGesture()
+                .onChanged { gesture in
+                    guard isEditable else {
+                        return
                     }
-                    .onEnded { _ in
-                        dragOriginRect = .zero
+                    if dragOriginRect == .zero {
+                        dragOriginRect = rect
                     }
-            )
+                    let translated = WatermarkGeometry.translatedRect(
+                        dragOriginRect,
+                        translation: gesture.translation,
+                        scale: layout.scale,
+                        bounds: imageSize
+                    )
+                    rect = translated
+                }
+                .onEnded { _ in
+                    guard isEditable else {
+                        return
+                    }
+                    dragOriginRect = .zero
+                })
         }
     }
 }

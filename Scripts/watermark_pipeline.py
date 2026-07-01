@@ -15,7 +15,7 @@ import numpy as np
 
 @dataclass
 class AnalysisResult:
-    rect: tuple[int, int, int, int]
+    rects: list[tuple[int, int, int, int]]
     mask: np.ndarray
     confidence: float
 
@@ -179,11 +179,23 @@ def grow_mask_in_rect(score_map: np.ndarray, rect: tuple[int, int, int, int]) ->
     return mask
 
 
-def detect_watermark(frames: list[np.ndarray]) -> AnalysisResult:
-    score_map, stability_map, _, _, brightness_map, edge_bias, lower_bias = compute_feature_maps(frames)
+def build_rect_mask(mask_shape: tuple[int, int], rect: tuple[int, int, int, int]) -> np.ndarray:
+    x, y, width, height = rect
+    mask = np.zeros(mask_shape, dtype=np.uint8)
+    mask[y:y + height, x:x + width] = 255
+    return mask
+
+
+def detect_corner_watermark(
+    score_map: np.ndarray,
+    stability_map: np.ndarray,
+    brightness_map: np.ndarray,
+    edge_bias: np.ndarray,
+    lower_bias: np.ndarray,
+) -> AnalysisResult | None:
     candidates = component_candidates(score_map, brightness_map, edge_bias, lower_bias)
     if not candidates:
-        raise RuntimeError("No se encontro una region candidata para la marca de agua.")
+        return None
 
     x, y, width, height, component_score, component_mask = candidates[0]
     padded_x = max(0, x - 10)
@@ -192,8 +204,7 @@ def detect_watermark(frames: list[np.ndarray]) -> AnalysisResult:
     padded_h = min(score_map.shape[0] - padded_y, max(height + 20, 48))
     rect = (padded_x, padded_y, padded_w, padded_h)
 
-    mask = np.zeros(score_map.shape, dtype=np.uint8)
-    mask[padded_y:padded_y + padded_h, padded_x:padded_x + padded_w] = 255
+    mask = build_rect_mask(score_map.shape, rect)
     refined_mask = grow_mask_in_rect(score_map, rect)
     mask[refined_mask > 0] = 255
     mask[component_mask] = 255
@@ -201,7 +212,145 @@ def detect_watermark(frames: list[np.ndarray]) -> AnalysisResult:
 
     stability_score = float(stability_map[mask > 0].mean()) if np.any(mask > 0) else 0.0
     confidence = float(np.clip(component_score * 0.68 + stability_score * 0.32, 0.0, 1.0))
-    return AnalysisResult(rect=rect, mask=mask, confidence=confidence)
+    return AnalysisResult(rects=[rect], mask=mask, confidence=confidence)
+
+
+def detect_top_right_overlay(
+    stability_map: np.ndarray,
+    edge_mean: np.ndarray,
+    contrast: np.ndarray,
+    brightness_map: np.ndarray,
+) -> AnalysisResult | None:
+    height, width = brightness_map.shape
+    x0 = int(width * 0.52)
+    y1 = int(height * 0.34)
+
+    score = (
+        0.50 * brightness_map
+        + 0.30 * stability_map
+        + 0.12 * edge_mean
+        + 0.08 * contrast
+    )
+
+    roi = score[0:y1, x0:width]
+    if roi.size == 0:
+        return None
+
+    threshold = max(float(np.percentile(roi, 99.0)), float(roi.mean() + roi.std() * 1.1))
+    binary = (roi >= threshold).astype(np.uint8) * 255
+    binary = cv2.morphologyEx(
+        binary,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (7, 3)),
+        iterations=1,
+    )
+    binary = cv2.dilate(binary, cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3)), iterations=1)
+
+    count, labels, stats, _ = cv2.connectedComponentsWithStats(binary)
+    candidates: list[tuple[int, int, int, int, float, np.ndarray]] = []
+
+    for label in range(1, count):
+        rx, ry, rw, rh, area = stats[label]
+        if area < 16:
+            continue
+        width_ratio = rw / max(width, 1)
+        height_ratio = rh / max(height, 1)
+        if width_ratio > 0.18:
+            continue
+        if height_ratio > 0.05:
+            continue
+
+        component_mask = labels == label
+        component_score = float(roi[component_mask].mean())
+        candidates.append((rx, ry, rw, rh, component_score, component_mask))
+
+    if not candidates:
+        return None
+
+    candidates.sort(key=lambda item: item[4], reverse=True)
+    best_score = candidates[0][4]
+
+    roi_mask = np.zeros(roi.shape, dtype=np.uint8)
+    selected = 0
+    for rx, ry, rw, rh, component_score, component_mask in candidates:
+        actual_x = x0 + rx
+        actual_y = ry
+        if component_score < best_score * 0.30:
+            continue
+        if actual_x < int(width * 0.55):
+            continue
+        if actual_y < int(height * 0.14) or actual_y > int(height * 0.31):
+            continue
+        roi_mask[component_mask] = 255
+        selected += 1
+
+    if selected == 0:
+        return None
+
+    roi_mask = cv2.morphologyEx(
+        roi_mask,
+        cv2.MORPH_CLOSE,
+        cv2.getStructuringElement(cv2.MORPH_RECT, (35, 5)),
+        iterations=1,
+    )
+    roi_mask = cv2.dilate(roi_mask, cv2.getStructuringElement(cv2.MORPH_RECT, (7, 3)), iterations=1)
+
+    ys, xs = np.where(roi_mask > 0)
+    if ys.size == 0 or xs.size == 0:
+        return None
+
+    min_x = int(xs.min())
+    max_x = int(xs.max())
+    min_y = int(ys.min())
+    max_y = int(ys.max())
+    pad_x = 10
+    pad_y = 8
+    rect = (
+        max(0, x0 + min_x - pad_x),
+        max(0, min_y - pad_y),
+        min(width - max(0, x0 + min_x - pad_x), (max_x - min_x + 1) + pad_x * 2),
+        min(height - max(0, min_y - pad_y), (max_y - min_y + 1) + pad_y * 2),
+    )
+
+    mask = np.zeros(brightness_map.shape, dtype=np.uint8)
+    mask[0:y1, x0:width][roi_mask > 0] = 255
+    confidence = float(np.clip(best_score, 0.0, 1.0))
+    return AnalysisResult(rects=[rect], mask=mask, confidence=confidence)
+
+
+def merge_analyses(analyses: list[AnalysisResult]) -> AnalysisResult:
+    combined_mask = np.zeros_like(analyses[0].mask)
+    rects: list[tuple[int, int, int, int]] = []
+    confidences: list[float] = []
+
+    for analysis in analyses:
+        combined_mask[analysis.mask > 0] = 255
+        rects.extend(analysis.rects)
+        confidences.append(analysis.confidence)
+
+    return AnalysisResult(
+        rects=rects,
+        mask=combined_mask,
+        confidence=float(np.clip(sum(confidences) / max(len(confidences), 1), 0.0, 1.0)),
+    )
+
+
+def detect_watermark(frames: list[np.ndarray]) -> AnalysisResult:
+    score_map, stability_map, edge_mean, contrast, brightness_map, edge_bias, lower_bias = compute_feature_maps(frames)
+    analyses: list[AnalysisResult] = []
+
+    corner_result = detect_corner_watermark(score_map, stability_map, brightness_map, edge_bias, lower_bias)
+    if corner_result is not None:
+        analyses.append(corner_result)
+
+    top_right_result = detect_top_right_overlay(stability_map, edge_mean, contrast, brightness_map)
+    if top_right_result is not None:
+        analyses.append(top_right_result)
+
+    if not analyses:
+        raise RuntimeError("No se encontro una region candidata para la marca de agua.")
+
+    return merge_analyses(analyses)
 
 
 def rect_to_pixels(rect_string: str, frame_shape: tuple[int, int, int]) -> tuple[int, int, int, int]:
@@ -222,7 +371,7 @@ def manual_analysis(frames: list[np.ndarray], rect_string: str) -> AnalysisResul
     rect = rect_to_pixels(rect_string, frames[0].shape)
     mask = grow_mask_in_rect(score_map, rect)
     confidence = float(np.clip(score_map[mask > 0].mean() if np.any(mask > 0) else 0.35, 0.0, 1.0))
-    return AnalysisResult(rect=rect, mask=mask, confidence=confidence)
+    return AnalysisResult(rects=[rect], mask=mask, confidence=confidence)
 
 
 def resize_mask_to_original(mask: np.ndarray, original_size: tuple[int, int]) -> np.ndarray:
@@ -268,7 +417,7 @@ def process_video(input_path: str, output_video: str, analysis: AnalysisResult, 
         if not ok:
             break
 
-        inpainted = cv2.inpaint(frame, mask, 5, cv2.INPAINT_TELEA)
+        inpainted = cv2.inpaint(frame, mask, 7, cv2.INPAINT_TELEA)
         writer.write(inpainted)
 
     capture.release()
@@ -276,9 +425,11 @@ def process_video(input_path: str, output_video: str, analysis: AnalysisResult, 
 
 
 def emit_ok(result: AnalysisResult, frame_shape: tuple[int, int, int]) -> None:
+    primary_rect = result.rects[0]
     payload = {
         "status": "ok",
-        "rect": normalized_rect(result.rect, frame_shape),
+        "rect": normalized_rect(primary_rect, frame_shape),
+        "regions": [normalized_rect(rect, frame_shape) for rect in result.rects],
         "confidence": round(result.confidence, 4),
     }
     print(json.dumps(payload))

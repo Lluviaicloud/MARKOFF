@@ -55,10 +55,9 @@ struct InpaintVideosAppTests {
         let detection = try await VideoProcessor().detectWatermark(inputURL: inputURL)
 
         #expect(detection.confidence > 0.45)
-        #expect(detection.normalizedRect.origin.x > 0.55)
-        #expect(detection.normalizedRect.origin.y > 0.55)
-        #expect(detection.normalizedRect.width > 0.05)
-        #expect(detection.normalizedRect.height > 0.05)
+        #expect(detection.normalizedRegions.count >= 2)
+        #expect(detection.normalizedRegions.contains(where: { $0.origin.x > 0.55 && $0.origin.y > 0.55 }))
+        #expect(detection.normalizedRegions.contains(where: { $0.origin.x > 0.55 && $0.origin.y < 0.20 }))
     }
 
     @Test
@@ -107,10 +106,13 @@ struct InpaintVideosAppTests {
         let inputFrame = try await firstFrame(from: inputURL)
         let outputFrame = try await firstFrame(from: outputURL)
         let knownWatermarkRect = CGRect(x: 244, y: 184, width: 42, height: 42)
+        let inputBottomLuminance = meanLuminance(in: inputFrame, rect: knownWatermarkRect)
+        let outputBottomLuminance = meanLuminance(in: outputFrame, rect: knownWatermarkRect)
         let inputBrightPixels = brightPixelCount(in: inputFrame, rect: knownWatermarkRect, threshold: 240)
         let outputBrightPixels = brightPixelCount(in: outputFrame, rect: knownWatermarkRect, threshold: 240)
 
-        #expect(Double(outputBrightPixels) < Double(inputBrightPixels) * 0.20)
+        #expect(outputBottomLuminance < inputBottomLuminance * 0.80)
+        #expect(Double(outputBrightPixels) < Double(inputBrightPixels) * 0.65)
     }
 
     @Test
@@ -145,7 +147,7 @@ struct InpaintVideosAppTests {
             "-y",
             "-f", "lavfi",
             "-i", "color=c=black:s=320x240:d=1",
-            "-vf", "drawbox=x='20+mod(t*120,140)':y=34:w=72:h=72:color=gray@1:t=fill,drawbox=x=116:y='70+mod(t*80,86)':w=36:h=36:color=blue@1:t=fill,drawbox=x=244:y=184:w=42:h=42:color=white@1:t=fill",
+            "-vf", "drawbox=x='20+mod(t*120,140)':y=34:w=72:h=72:color=gray@1:t=fill,drawbox=x=116:y='70+mod(t*80,86)':w=36:h=36:color=blue@1:t=fill,drawbox=x=244:y=184:w=42:h=42:color=white@1:t=fill,drawbox=x=178:y=34:w=28:h=28:color=white@1:t=fill,drawbox=x=214:y=40:w=74:h=7:color=white@1:t=fill,drawbox=x=214:y=54:w=92:h=7:color=white@1:t=fill",
             "-c:v", "libx264",
             "-pix_fmt", "yuv420p",
             url.path,

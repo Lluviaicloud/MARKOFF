@@ -17,7 +17,7 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("Limpieza local de marcas de agua")
                 .font(.largeTitle.weight(.semibold))
-            Text("MVP de fase 1: seleccion manual del area y regeneracion con ffmpeg sobre videos MP4.")
+            Text("Deteccion automatica multirregion e inpainting real con OpenCV sobre videos MP4.")
                 .foregroundStyle(.secondary)
         }
     }
@@ -57,7 +57,9 @@ struct ContentView: View {
                     VideoPreviewCanvas(
                         image: previewImage,
                         imageSize: viewModel.previewSize,
-                        rect: $viewModel.watermarkRect
+                        rect: $viewModel.watermarkRect,
+                        overlayRects: viewModel.cleanupMode == .automatic ? viewModel.detectedRegions : [],
+                        isEditable: viewModel.cleanupMode == .manual
                     )
                     .frame(maxWidth: 760, maxHeight: 520)
                     .background(Color.black.opacity(0.92))
@@ -121,7 +123,7 @@ struct ContentView: View {
 
             Divider()
 
-            Text("Auto usa deteccion e inpainting reales. Manual usa tu rectangulo actual como guia de mascara.")
+            Text("Auto dibuja todas las regiones detectadas. Manual usa tu rectangulo actual como guia de mascara.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
 

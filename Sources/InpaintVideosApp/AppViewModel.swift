@@ -27,6 +27,7 @@ final class AppViewModel {
     var previewImage: NSImage?
     var previewSize: CGSize = .zero
     var watermarkRect: CGRect = CGRect(x: 40, y: 40, width: 160, height: 80)
+    var detectedRegions: [CGRect] = []
     var cleanupMode: CleanupMode = .automatic
     var detectionConfidence: Double?
     var isProcessing = false
@@ -53,6 +54,7 @@ final class AppViewModel {
         errorMessage = nil
         statusMessage = "Generando vista previa..."
         detectionConfidence = nil
+        detectedRegions = []
         cleanupMode = .automatic
 
         Task {
@@ -140,6 +142,7 @@ final class AppViewModel {
             } catch {
                 isDetecting = false
                 detectionConfidence = nil
+                detectedRegions = []
                 cleanupMode = .manual
                 errorMessage = error.localizedDescription
                 statusMessage = "La deteccion automatica ha fallado. Puedes ajustar el rectangulo manualmente."
@@ -153,6 +156,7 @@ final class AppViewModel {
             previewImage = result.image
             previewSize = result.size
             watermarkRect = WatermarkGeometry.defaultRect(for: result.size)
+            detectedRegions = []
             statusMessage = "Vista previa lista. Ejecutando deteccion automatica..."
             detectWatermark()
         } catch {
@@ -165,10 +169,10 @@ final class AppViewModel {
 
     private func applyDetection(_ result: WatermarkDetectionResult) {
         detectionConfidence = result.confidence
-        watermarkRect = WatermarkGeometry.absoluteRect(
-            normalizedRect: result.normalizedRect,
-            videoSize: previewSize
-        )
+        detectedRegions = result.normalizedRegions.map {
+            WatermarkGeometry.absoluteRect(normalizedRect: $0, videoSize: previewSize)
+        }
+        watermarkRect = WatermarkGeometry.absoluteRect(normalizedRect: result.normalizedRect, videoSize: previewSize)
     }
 
     private var formattedConfidence: String {

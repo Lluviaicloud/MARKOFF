@@ -3,6 +3,7 @@ import Foundation
 
 struct WatermarkDetectionResult {
     let normalizedRect: CGRect
+    let normalizedRegions: [CGRect]
     let confidence: Double
 }
 
@@ -155,6 +156,7 @@ private struct PythonResponsePayload: Decodable {
     let status: String
     let message: String?
     let rect: PythonRectPayload?
+    let regions: [PythonRectPayload]?
     let confidence: Double?
 
     func asDetectionResult() throws -> WatermarkDetectionResult {
@@ -164,6 +166,9 @@ private struct PythonResponsePayload: Decodable {
 
         return WatermarkDetectionResult(
             normalizedRect: CGRect(x: rect.x, y: rect.y, width: rect.width, height: rect.height),
+            normalizedRegions: (regions ?? [rect]).map {
+                CGRect(x: $0.x, y: $0.y, width: $0.width, height: $0.height)
+            },
             confidence: confidence
         )
     }
