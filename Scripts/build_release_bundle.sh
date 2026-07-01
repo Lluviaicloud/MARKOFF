@@ -6,6 +6,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 RELEASE_DIR="$ROOT_DIR/.build/arm64-apple-macosx/release"
 EXECUTABLE_PATH="$RELEASE_DIR/InpaintVideosApp"
 INFO_PLIST_SOURCE="$ROOT_DIR/Packaging/InpaintVideosApp-Info.plist"
+APP_ICON_SOURCE="$ROOT_DIR/Packaging/AppIcon.icns"
 PYTHON_SCRIPT_SOURCE="$ROOT_DIR/Scripts/watermark_pipeline.py"
 DIST_DIR="$ROOT_DIR/dist"
 APP_NAME="InpaintVideos.app"
@@ -44,6 +45,7 @@ cd "$ROOT_DIR"
 
 required_files=(
     "$INFO_PLIST_SOURCE"
+    "$APP_ICON_SOURCE"
     "$PYTHON_SCRIPT_SOURCE"
 )
 
@@ -85,6 +87,8 @@ esac
     "$INFO_PLIST_SOURCE" "$STAGING_APP/Contents/Info.plist"
 /usr/bin/ditto --norsrc --noextattr --noqtn --noacl \
     "$EXECUTABLE_PATH" "$STAGING_APP/Contents/MacOS/InpaintVideosApp"
+/usr/bin/ditto --norsrc --noextattr --noqtn --noacl \
+    "$APP_ICON_SOURCE" "$STAGING_APP/Contents/Resources/AppIcon.icns"
 /usr/bin/ditto --norsrc --noextattr --noqtn --noacl \
     "$PYTHON_SCRIPT_SOURCE" "$STAGING_APP/Contents/Resources/Scripts/watermark_pipeline.py"
 

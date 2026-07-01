@@ -13,6 +13,7 @@ La version 1.0 implementa:
 - Modo manual de respaldo con rectangulo editable
 - Exportacion de un nuevo video con audio remuxeado desde el original
 - Empaquetado de distribucion en `.app` y `.dmg` para macOS arm64
+- Icono personalizado de la app integrado en el bundle macOS
 
 ## Requisitos
 
