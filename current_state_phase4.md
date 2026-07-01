@@ -1,6 +1,7 @@
 # Current State Phase 4
 
-- Phase 4 closing commit date and status: 2026-07-01 14:18:42 CEST, READY TO COMMIT
+- Phase 4 closing commit date and status: 2026-07-01 14:20:29 CEST, COMMITTED
+- Phase 4 closing commit reference: `7dd5f10` (`Phase 4: harden process execution and preserve duration`)
 
 ## What Was Built
 
@@ -62,7 +63,7 @@
 ## Rollback Instructions
 
 1. Run `git status` and confirm only phase-4 files are present.
-2. Run `git reset --hard HEAD~1` to remove the phase-4 implementation commit once it exists.
+2. Run `git reset --hard HEAD~2` to remove both the phase-4 implementation commit and the phase-state sync commit.
 3. If you also want to remove the temporary validation outputs, delete `/private/tmp/video-luna-audit-silent.mp4` and `/private/tmp/video-luna-audit-final.mp4`.
 
 ## Next Phase Entry Conditions
