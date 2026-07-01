@@ -4,23 +4,25 @@ Aplicacion local para macOS Apple Silicon que limpia marcas de agua de videos `.
 
 ## Estado actual
 
-La fase 2 implementa:
+La version 1.0 implementa:
 
 - Seleccion de video de entrada `.mp4`
 - Vista previa del primer frame
-- Deteccion automatica de una region candidata para la marca de agua
+- Deteccion automatica de una o varias regiones candidatas para la marca
 - Inpainting real por frame con OpenCV (`cv2.inpaint`)
 - Modo manual de respaldo con rectangulo editable
 - Exportacion de un nuevo video con audio remuxeado desde el original
+- Empaquetado de distribucion en `.app` y `.dmg` para macOS arm64
 
 ## Requisitos
 
-- macOS con Apple Silicon
+- macOS Tahoe 26 sobre Apple Silicon
 - Xcode 26 o superior
-- `ffmpeg` y `ffprobe` instalados en `/opt/homebrew/bin`
-- Entorno Python local en `.venv` con `numpy` y `opencv-python-headless`
+- `ffmpeg` y `ffprobe` accesibles desde el sistema
+- `python3` disponible en el sistema o entorno local `.venv`
+- Dependencias Python: `numpy` y `opencv-python-headless`
 
-## Ejecutar
+## Ejecutar en desarrollo
 
 ```bash
 swift run InpaintVideosApp
@@ -33,8 +35,23 @@ python3 -m venv .venv
 ./.venv/bin/pip install numpy opencv-python-headless
 ```
 
-## Alcance actual
+## Generar app y DMG
 
-- La deteccion automatica actual es heuristica y esta optimizada para overlays pequenos y persistentes, especialmente cercanos al borde
+```bash
+./Scripts/build_release_bundle.sh
+```
+
+Artefacto generado:
+
+- `dist/InpaintVideos-macos-arm64.dmg`
+
+Nota:
+
+- El `.app` firmado se construye en un staging temporal fuera de `Documents` para evitar atributos extendidos que invalidan `codesign`, y queda encapsulado dentro del `.dmg`
+
+## Limitaciones conocidas de v1.0
+
+- Si el pipeline elimina o recompone frames, la pista de audio puede quedar mas corta que el video final
+- La deteccion automatica sigue siendo heuristica y esta optimizada para overlays pequenos y persistentes, especialmente cercanos al borde
 - El motor de eliminacion usa inpainting clasico de OpenCV, no un modelo generativo entrenado
-- Si la autodeteccion falla o la confianza no es suficiente, la app permite correccion manual antes de exportar
+- La app empaquetada sigue dependiendo de `ffmpeg` y `python3` disponibles en el equipo destino

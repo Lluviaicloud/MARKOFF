@@ -109,6 +109,52 @@ struct InpaintVideosAppTests {
     }
 
     @Test
+    func pythonScriptResolutionPrefersBundledResource() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let bundledScripts = tempDirectory
+            .appendingPathComponent("BundleResources", isDirectory: true)
+            .appendingPathComponent("Scripts", isDirectory: true)
+        let checkoutScripts = tempDirectory
+            .appendingPathComponent("CheckoutRoot", isDirectory: true)
+            .appendingPathComponent("Scripts", isDirectory: true)
+
+        try FileManager.default.createDirectory(at: bundledScripts, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: checkoutScripts, withIntermediateDirectories: true)
+
+        let bundledScript = bundledScripts.appendingPathComponent("watermark_pipeline.py")
+        let checkoutScript = checkoutScripts.appendingPathComponent("watermark_pipeline.py")
+        try Data("bundled".utf8).write(to: bundledScript)
+        try Data("checkout".utf8).write(to: checkoutScript)
+
+        let resolved = ProjectPaths.resolvedPythonScriptURL(
+            mainBundleResourceURL: tempDirectory.appendingPathComponent("BundleResources", isDirectory: true),
+            projectRootOverride: tempDirectory.appendingPathComponent("CheckoutRoot", isDirectory: true)
+        )
+
+        #expect(resolved == bundledScript)
+    }
+
+    @Test
+    func pythonScriptResolutionFallsBackToCheckoutScript() throws {
+        let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let checkoutScripts = tempDirectory
+            .appendingPathComponent("CheckoutRoot", isDirectory: true)
+            .appendingPathComponent("Scripts", isDirectory: true)
+
+        try FileManager.default.createDirectory(at: checkoutScripts, withIntermediateDirectories: true)
+
+        let checkoutScript = checkoutScripts.appendingPathComponent("watermark_pipeline.py")
+        try Data("checkout".utf8).write(to: checkoutScript)
+
+        let resolved = ProjectPaths.resolvedPythonScriptURL(
+            mainBundleResourceURL: tempDirectory.appendingPathComponent("MissingBundle", isDirectory: true),
+            projectRootOverride: tempDirectory.appendingPathComponent("CheckoutRoot", isDirectory: true)
+        )
+
+        #expect(resolved == checkoutScript)
+    }
+
+    @Test
     func automaticCleanupReducesWatermarkBrightness() async throws {
         let tempDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: tempDirectory, withIntermediateDirectories: true)
