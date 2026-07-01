@@ -1,6 +1,7 @@
 # Current State Phase 1
 
-- Phase 1 closing commit date and status: 2026-07-01 13:15:26 CEST, READY TO COMMIT
+- Phase 1 closing commit date and status: 2026-07-01 13:15:26 CEST, COMMITTED
+- Phase 1 closing commit reference: `0d4d178` (`Phase 1: macOS watermark cleanup MVP`)
 
 ## What Was Built
 
@@ -65,8 +66,7 @@
 ## Rollback Instructions
 
 1. Run `git status` and confirm only phase-1 files are present.
-2. If the phase-1 commit exists, run `git reset --hard HEAD~1` to restore the repository to the pre-phase state.
-3. If the phase-1 commit does not exist yet, remove the created files from the repository root and restore the empty workspace.
+2. Run `git reset --hard HEAD~2` to remove both the implementation commit and the documentation sync commit for phase 1.
 
 ## Next Phase Entry Conditions
 
